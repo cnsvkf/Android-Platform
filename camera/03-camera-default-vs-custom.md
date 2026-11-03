@@ -1,45 +1,45 @@
-# 기본 카메라 vs 커스텀 카메라: 사진은 어떻게 앱으로 돌아올까?
+# 기본 카메라 vs 커스텀 카메라: 저는 사진이 앱으로 돌아오는 과정이 제일 헷갈렸습니다
 
-> 앱에서 사진을 찍는 방법은 두 가지입니다.
-> **기본 카메라**는 "카메라 앱아, 사진 한 장 찍어 줘" 하고 **부탁**하는 방식입니다.
-> **커스텀 카메라**는 카메라 화면을 **내 앱 안에서 직접** 그리고 사진도 **직접** 찍는 방식입니다.
-> 이 글에서는 두 방식의 흐름, 사진 파일이 전달되는 방법, 코드의 차이를 순서대로 설명합니다.
+> 앱에서 사진을 찍는 방법은 두 가지가 있다는 것을 알게 됐습니다.
+> **기본 카메라**는 "카메라 앱아, 사진 한 장 찍어 줘"라고 **부탁**하는 방식입니다.
+> **커스텀 카메라**는 카메라 화면을 제가 **직접** 그리고, 사진도 **직접** 찍는 방식입니다.
+> 제가 두 방식을 공부하며 정리한 흐름, 사진 파일이 전달되는 방법, 코드의 차이를 순서대로 적었습니다.
 
 ---
 
-## 0. 먼저 알아둘 개념 2가지
+## 0. 공부하면서 먼저 이해해야 했던 개념 2가지
 
-### 개념 1: 앱은 다른 앱의 파일 경로를 직접 열 수 없습니다
+### 개념 1: 다른 앱의 파일 경로를 그대로 열 수 없습니다
 
-카메라 앱은 **다른 앱**입니다. 내 앱이 "/cache/photo.jpg"라는 경로를 알려 줘도 카메라 앱은 그 파일을 쓸 권한이 없습니다.
-그래서 **"이 주소의 파일에 저장해 주세요"** 라는 **Uri(주소표)** 를 건네줍니다.
+카메라 앱은 **다른 앱**입니다. 제 앱이 "/cache/photo.jpg"라는 경로를 알려 줘도 카메라 앱은 그 파일에 쓸 권한이 없었습니다.
+그래서 **"이 주소에 저장해 주세요"** 라는 **Uri(주소표)** 를 건네야 합니다.
 
 ### 개념 2: FileProvider는 "안전한 열쇠"입니다
 
 Android 7.0 이상에서는 `file://` 경로를 다른 앱에 넘기면 오류가 납니다.
-`FileProvider`는 내 파일을 `content://` 형식의 Uri로 바꿔 주고, **필요한 권한만 잠깐** 열어 줍니다.
+`FileProvider`는 제 파일을 `content://` 형식의 Uri로 바꿔 주고, 필요한 권한만 잠깐 열어 줍니다.
 
 ```
 내 앱의 파일  ──(FileProvider)──▶  content://...  Uri  ──▶  카메라 앱·다른 앱
-(/cache/photos/a.jpg)              (열쇠 역할)             (권한 받아서 읽고 씀)
+(/cache/photos/a.jpg)              (열쇠 역할)             (권한을 받아 읽고 씀)
 ```
 
 ---
 
-## 1. 한눈에 비교하기
+## 1. 한눈에 비교표
 
 | 구분 | 기본 카메라 | 커스텀 카메라 (CameraX) |
 |---|---|---|
 | 비유 | 사진관에 맡기기 | 내 스튜디오에서 직접 찍기 |
-| 카메라 화면 | 시스템 카메라 앱 | 내 앱 안의 미리보기 |
-| 저장을 누가 하나요? | 카메라 앱 | 내 앱 |
-| 카메라 권한(`CAMERA`) | 필요 없음 | 필요함 |
-| 준비 코드 양 | 적음 | 많음 |
-| 화면 꾸미기 | 불가능 | 자유롭게 가능 |
+| 카메라 화면 | 시스템 카메라 앱 | 제 앱 안의 미리보기 |
+| 저장은 누가 하나요? | 카메라 앱 | 제 앱 |
+| 카메라 권한(`CAMERA`) | 필요 없습니다 | 필요합니다 |
+| 준비 코드 양 | 적습니다 | 많습니다 |
+| 화면 꾸미기 | 불가능합니다 | 자유롭게 가능합니다 |
 | 어울리는 경우 | 사진 한 장만 필요할 때 | 가이드 선을 띄우거나 연속 촬영할 때 |
 
-> **한 줄 정리**
-> 사진 한 장이면 **기본 카메라**, 화면과 동작을 직접 설계해야 하면 **커스텀 카메라**입니다.
+> **한 줄 결론**
+> 사진 한 장이면 **기본 카메라**, 화면과 동작을 직접 설계해야 하면 **커스텀 카메라**를 쓰면 됩니다.
 
 ---
 
@@ -48,16 +48,16 @@ Android 7.0 이상에서는 `file://` 경로를 다른 앱에 넘기면 오류�
 ### 2-1. 전체 흐름
 
 ```
-① 저장할 빈 파일을 만든다 (내 앱 안)
-② 그 파일의 content:// Uri를 만든다 (FileProvider)
-③ 카메라 앱에 "이 Uri에 찍어 줘"라고 부탁한다 (launch)
-④ 사용자가 찍고 확인을 누른다
-⑤ 카메라 앱이 Uri의 파일에 사진을 쓴다
-⑥ 성공 여부(true/false)가 돌아온다
-⑦ 내 앱은 같은 파일을 읽어서 쓴다
+① 저장할 빈 파일을 만듭니다 (제 앱 안)
+② 그 파일의 content:// Uri를 만듭니다 (FileProvider)
+③ 카메라 앱에 "이 Uri에 찍어 줘"라고 부탁합니다 (launch)
+④ 사용자가 찍고 확인을 누릅니다
+⑤ 카메라 앱이 Uri의 파일에 사진을 씁니다
+⑥ 성공 여부(true/false)가 돌아옵니다
+⑦ 제 앱은 같은 파일을 읽어서 씁니다
 ```
 
-핵심은 **⑤에서 사진이 "돌아오는" 것이 아니라 이미 파일에 저장되어 있다**는 점입니다.
+⑤에서 사진이 돌아오는 것이 아니라 **이미 파일에 저장되어 있다**는 점이 핵심입니다.
 
 ### 2-2. 준비 1: FileProvider 설정
 
@@ -75,7 +75,7 @@ Android 7.0 이상에서는 `file://` 경로를 다른 앱에 넘기면 오류�
 </provider>
 ```
 
-**res/xml/file_paths.xml** (공개할 폴더를 적습니다)
+**res/xml/file_paths.xml** (다른 앱에 공개할 폴더를 적습니다)
 
 ```xml
 <paths>
@@ -84,7 +84,7 @@ Android 7.0 이상에서는 `file://` 경로를 다른 앱에 넘기면 오류�
 </paths>
 ```
 
-> `authorities`는 코드의 `"${packageName}.fileprovider"`와 **반드시 같아야** 합니다.
+> 📌 주의: `authorities`와 코드의 문자열이 다르면 Uri를 만들 때 오류가 납니다. 두 곳을 모두 `${packageName}.fileprovider`로 맞춰야 합니다.
 
 ### 2-3. 준비 2: 저장할 파일과 Uri 만들기
 
@@ -97,7 +97,7 @@ fun createCaptureUri(context: Context): Uri {
     val file = File(photoDir, "capture_${UUID.randomUUID()}.jpg")
     file.createNewFile()
 
-    // 3) 파일을 content:// Uri로 바꿉니다. 이 Uri를 카메라 앱에 줍니다.
+    // 3) 파일을 content:// Uri로 바꿉니다. 이 Uri를 카메라 앱에 건넵니다.
     return FileProvider.getUriForFile(
         context,
         "${context.packageName}.fileprovider",
@@ -106,7 +106,7 @@ fun createCaptureUri(context: Context): Uri {
 }
 ```
 
-### 2-4. 촬영 요청과 결과 받기
+### 2-4. 촬영을 요청하고 결과 받기
 
 ```kotlin
 @Composable
@@ -120,27 +120,27 @@ fun BasicCameraButton(onPhotoSaved: (Uri) -> Unit) {
     ) { success ->
         val uri = pendingUri
         if (success && uri != null) {
-            onPhotoSaved(uri)      // 사진은 이미 uri 파일에 있습니다.
+            onPhotoSaved(uri)      // 사진은 이미 uri 파일에 저장되어 있습니다.
         }
     }
 
     Button(onClick = {
         val uri = createCaptureUri(context)
         pendingUri = uri
-        launcher.launch(uri)       // 카메라 앱 실행: 이 Uri에 저장해 달라고 부탁
+        launcher.launch(uri)       // 카메라 앱 실행: 이 Uri에 저장해 달라고 부탁합니다.
     }) {
         Text("카메라로 찍기")
     }
 }
 ```
 
-> 📌 **포인트**: `onActivityResult`의 `data.extras["data"]`로 받던 **썸네일**은 작은 이미지입니다. 원본을 받으려면 **Uri에 저장하는 방식**을 써야 합니다.
+> 📌 참고: 예전 방식에서 `data.extras["data"]`로 받던 것은 **썸네일**이라서 작았습니다. 원본을 받으려면 **Uri에 저장하는 방식**을 써야 했습니다.
 
 ---
 
-## 3. 커스텀 카메라: 내 앱에서 직접 찍기 (CameraX)
+## 3. 커스텀 카메라: 제 앱에서 직접 찍기 (CameraX)
 
-커스텀 카메라는 **세 단계**로 생각하면 쉽습니다.
+커스텀 카메라는 **세 단계**로 나눠서 보면 쉽습니다.
 
 ```
 ① 권한 받기 (CAMERA)
@@ -161,7 +161,7 @@ fun BasicCameraButton(onPhotoSaved: (Uri) -> Unit) {
 ```kotlin
 var hasCameraPermission by remember { mutableStateOf(false) }
 
-// 권한 요청 창을 띄우고, 허용 여부를 Boolean으로 받습니다.
+// 권한 요청 창을 띄우고, 허용했는지를 Boolean으로 받습니다.
 val permissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission(),
 ) { granted ->
@@ -204,7 +204,7 @@ AndroidView(factory = { context ->
 })
 ```
 
-> 📌 `bindToLifecycle`에 `lifecycleOwner`를 넘기면 **화면이 꺼질 때 카메라도 자동으로 꺼집니다.**
+> 📌 `bindToLifecycle`에 `lifecycleOwner`를 넘기면 화면이 꺼질 때 카메라도 자동으로 꺼집니다.
 
 ### 3-3. 버튼을 누르면 파일로 저장하기
 
@@ -214,7 +214,7 @@ fun takePhoto(
     imageCapture: ImageCapture,
     onSaved: (Uri) -> Unit,
 ) {
-    // 1) 저장할 파일을 정합니다. 앱이 직접 쓰므로 경로를 알고 있습니다.
+    // 1) 저장할 파일을 정합니다. 제 앱이 직접 쓰기 때문에 경로를 제가 알고 있습니다.
     val file = File(File(context.cacheDir, "photos").apply { mkdirs() }, "custom_${UUID.randomUUID()}.jpg")
     val options = ImageCapture.OutputFileOptions.Builder(file).build()
 
@@ -229,7 +229,7 @@ fun takePhoto(
             }
 
             override fun onError(exception: ImageCaptureException) {
-                // 실패 처리 (예: 안내 메시지 표시)
+                // 실패했을 때의 처리입니다. (예: 안내 메시지 표시)
             }
         },
     )
@@ -240,48 +240,48 @@ fun takePhoto(
 
 ```
 권한 허용 → 미리보기 시작 → 버튼 클릭 → takePicture
-   → 앱이 직접 file에 JPEG 저장 → onImageSaved 콜백 → Uri로 변환해서 사용
+   → 제 앱이 직접 file에 JPEG 저장 → onImageSaved 콜백 → Uri로 바꿔서 사용
 ```
 
 ---
 
-## 4. 두 방식의 차이 한눈에 보기
+## 4. 두 방식의 차이
 
 | 항목 | 기본 카메라 | 커스텀 카메라 |
 |---|---|---|
 | 촬영을 시작하는 코드 | `launcher.launch(uri)` | `imageCapture.takePicture(...)` |
-| 저장하는 주체 | 카메라 앱 | 내 앱 |
-| 저장 위치를 정하는 방법 | FileProvider Uri를 넘김 | `OutputFileOptions(file)`에 파일을 넘김 |
+| 저장하는 주체 | 카메라 앱 | 제 앱 |
+| 저장 위치를 정하는 방법 | FileProvider Uri를 넘깁니다 | `OutputFileOptions(file)`에 파일을 넘깁니다 |
 | 결과를 확인하는 방법 | `success: Boolean` | `onImageSaved` / `onError` 콜백 |
-| 필요한 권한 | 없음 | `CAMERA` |
-| 다른 앱에 넘길 때 | 이미 `content://` Uri | `FileProvider`로 Uri 변환 필요 |
-| 실패했을 때 정리 | 취소되면 빈 파일 삭제 | 실패하면 파일 삭제 |
+| 필요한 권한 | 없습니다 | `CAMERA`가 필요합니다 |
+| 다른 앱에 넘길 때 | 이미 `content://` Uri입니다 | `FileProvider`로 Uri를 바꿔야 합니다 |
+| 실패했을 때 정리 | 취소되면 빈 파일을 지웁니다 | 실패하면 파일을 지웁니다 |
 
 ---
 
 ## 5. 사진을 다른 앱(메신저 등)에 보내기
 
-파일 경로(`file://`)를 그대로 보내면 안 됩니다. 반드시 **content:// Uri**를 보내고 **읽기 권한 flag**를 함께 줍니다.
+파일 경로(`file://`)를 그대로 보내면 안 됩니다. 반드시 **content:// Uri**를 보내고 **읽기 권한 flag**를 함께 줘야 합니다.
 
 ```kotlin
 val shareIntent = Intent(Intent.ACTION_SEND).apply {
     type = "image/jpeg"                                   // 사진 파일
     putExtra(Intent.EXTRA_STREAM, photoUri)               // content:// Uri
-    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)       // 받는 앱이 읽을 수 있게 허락
+    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)       // 받는 앱이 읽을 수 있게 허락합니다.
 }
 context.startActivity(Intent.createChooser(shareIntent, "사진 공유"))
 ```
 
-> 자세한 Intent 사용법은 **2편(Intent 완전 정리)** 을 참고하세요.
+> Intent 자체가 낯설다면 **2편(Intent 정리)** 을 먼저 보시면 이 부분이 훨씬 잘 읽힐 거라고 생각합니다.
 
 ---
 
-## 6. 어떤 방식을 골라야 할까?
+## 6. 방식을 고르는 기준
 
 ```
 사진 한 장이면 충분한가?
 ├─ 예 → 기본 카메라 (TakePicture)
-│       · 권한 필요 없음 · 준비 코드 적음
+│       · 권한이 필요 없고, 준비 코드가 적습니다
 └─ 아니오 → 화면을 직접 꾸미거나 연속 촬영이 필요한가?
             └─ 예 → 커스텀 카메라 (CameraX)
 ```
@@ -290,13 +290,13 @@ context.startActivity(Intent.createChooser(shareIntent, "사진 공유"))
 
 ## 7. 자주 하는 실수
 
-| 실수 | 해결 |
+| 실수 | 해결 방법 |
 |---|---|
 | `authorities`와 코드의 문자열이 다름 | 둘 다 `${packageName}.fileprovider`로 맞춤 |
-| `file_paths.xml`에 폴더를 안 적음 | 사진을 저장하는 폴더를 `cache-path`로 추가 |
+| `file_paths.xml`에 사진 폴더를 적지 않음 | 사진 저장 폴더를 `cache-path`로 추가 |
 | 파일 경로를 다른 앱에 그대로 넘김 | FileProvider로 `content://` Uri를 만듦 |
-| 커스텀 카메라에서 권한 확인을 안 함 | 권한 허용 후에만 `bindToLifecycle` 호출 |
-| 찍은 파일을 캐시에 두고 계속 쌓임 | 쓰지 않는 파일은 삭제 |
+| 커스텀 카메라에서 권한 확인을 빠뜨림 | 권한을 허용한 뒤에만 `bindToLifecycle`을 호출 |
+| 찍은 파일이 캐시에 쌓임 | 쓰지 않는 파일은 삭제 |
 
 ---
 
